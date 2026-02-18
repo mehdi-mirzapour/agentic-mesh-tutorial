@@ -2,6 +2,10 @@ import redis
 import os
 import time
 from typing import Optional, List, Any
+from dotenv import load_dotenv
+
+# Load env variables from .env file if present
+load_dotenv()
 
 # Load env variables (assume none for now or default localhost)
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
