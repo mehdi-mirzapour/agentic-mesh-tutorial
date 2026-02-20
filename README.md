@@ -13,10 +13,10 @@ This repository serves as a tutorial and reference implementation for building s
 
 ## Project Overview
 
-- **Minimalist Agentic Part**: Specialist agents simulate LLM processing with dummy suggestions to keep the tutorial cost-free (no API token usage required).
+- **Minimalist Agentic Part**: Specialist agents simulate LLM processing and append a processing audit tag (e.g., `[AI SERVICE: GRAMMAR DONE]`) to verify the flow.
 - **Full Mesh Implementation**: Real Redis Streams infrastructure for task distribution, fan-out, and aggregation.
   - **Coordinator**: Fans out tasks to specialists.
-  - **Specialists**: Independent workers that process specific aspects of a document.
+  - **Specialists**: Independent workers that process specific aspects of a document. Supports real `.docx` ingestion.
   - **Aggregator**: Collects all insights and produces a final summary for the user interface.
 
 ### Architecture Diagram
@@ -91,47 +91,44 @@ uv run python -m src.main start-all
 
 ### 2. Produce a Document
 
-In a separate terminal, simulate a user uploading a document:
+In a separate terminal, simulate a user uploading content:
 
+**Option A: Simulated Paragraphs**
 ```bash
-uv run python -m src.main produce --doc_id "doc-123" --paragraphs 5
+uv run python -m src.main produce --doc_id "sim-123" --paragraphs 5
 ```
 
-Watch the logs in your main terminal. You will see the flow:
-`Coordinator -> [Fan Out] -> Specialists (Parallel) -> Aggregator -> Final Summary`.
-
-### 3. Run Agents Individually (Deep Dive)
-
-To understand the mesh better, run each component in a separate terminal:
-
+**Option B: Real .docx File**
 ```bash
-# Terminal 1: Coordinator (The Traffic Controller)
-uv run python -m src.main coordinator
+# First, generate a test file (optional)
+uv run python create_dummy_docx.py
 
-# Terminal 2: Grammar Specialist (The Expert)
-uv run python -m src.main specialist --type grammar
-
-# Terminal 3: Clarity Specialist (The Editor)
-uv run python -m src.main specialist --type clarity
-
-# Terminal 4: Aggregator await results
-uv run python -m src.main aggregator
-
-# Terminal 5: User Upload Action
-uv run python -m src.main produce
+# Produce from the file
+uv run python -m src.main produce --file dummy_test.docx --doc_id "docx-test"
 ```
+
+Watch the logs to see each agent append its tag: `[AI SERVICE: <TYPE> DONE]`.
+
+### 3. Verification & Results
+You can check the final aggregated results in Redis:
+```bash
+uv run python check_results.py
+```
+
+### 4. Detailed Manual Testing (Deep Dive)
+For a step-by-step walkthrough of the mesh internals, including specific Redis commands to monitor each stage, see the **[Detailed Mesh Execution Report](./docs/mesh_execution_report.md)**.
 
 ## Project Structure
 
 - `src/core`: Shared models and Redis client infrastructure.
 - `src/agents`: The heart of the mesh.
   - `coordinator.py`: Logic for task decomposition.
-  - `specialists.py`: Domain-specific agent logic.
+  - `specialists.py`: Domain-specific agent logic with audit tagging.
   - `aggregator.py`: Result synthesis.
-- `src/ingestion`: Simulates the entry point for documents.
+- `src/ingestion`: Handles document ingestion (Simulated or .docx).
 - `src/main.py`: Unified CLI entrypoint to control the mesh.
 
 ## Notes
 
-- The specialist agents currently sleep for a random duration and return a prefixed string suggestion.
+- The specialist agents currently sleep for a random duration and return a modified version of the text with an audit tag.
 - **Extension Exercise**: Modify `src/agents/specialists.py` to call a real LLM API (like OpenAI or Anthropic) to turn this into a production-ready system.
