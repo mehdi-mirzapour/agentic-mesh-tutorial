@@ -19,6 +19,30 @@ This repository serves as a tutorial and reference implementation for building s
   - **Specialists**: Independent workers that process specific aspects of a document.
   - **Aggregator**: Collects all insights and produces a final summary for the user interface.
 
+### Architecture Diagram
+
+```mermaid
+graph TD
+    User([User]) -->|Inputs Document| C[Coordinator]
+    
+    subgraph "The Mesh (Fabric)"
+        C -->|Fans Out Task| G[Grammar Agent]
+        C -->|Fans Out Task| T[Tone Agent]
+        C -->|Fans Out Task| Cl[Clarity Agent]
+        C -->|Fans Out Task| S[Structure Agent]
+    end
+
+    G -->|Pushes Result| A[Aggregator]
+    T -->|Pushes Result| A
+    Cl -->|Pushes Result| A
+    S -->|Pushes Result| A
+    
+    A -->|Final Report| User
+    
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+```
+
 ## Prerequisites
 
 - **Python 3.12+** (managed by `uv` for modernity and speed)

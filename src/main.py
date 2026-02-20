@@ -11,6 +11,22 @@ from src.agents.specialists import (
 from src.agents.aggregator import AggregatorAgent
 from src.ingestion.producer import produce_document as producer_cmd
 
+def run_coordinator():
+    CoordinatorAgent().run()
+
+def run_specialist(type_):
+    if type_ == "grammar":
+        create_grammar_agent().run()
+    elif type_ == "clarity":
+        create_clarity_agent().run()
+    elif type_ == "tone":
+        create_tone_agent().run()
+    elif type_ == "structure":
+        create_structure_agent().run()
+
+def run_aggregator():
+    AggregatorAgent().run()
+
 @click.group()
 def cli():
     pass
@@ -56,34 +72,17 @@ def start_all():
     processes = []
     
     # 1 Coordinator
-    # We instantiate inside the target function to avoid pickling open redis connections if any
-    def run_coordinator():
-        CoordinatorAgent().run()
-
     p_coord = multiprocessing.Process(target=run_coordinator)
     p_coord.start()
     processes.append(p_coord)
     
     # 4 Specialists
-    def run_specialist(type_):
-        if type_ == "grammar":
-            create_grammar_agent().run()
-        elif type_ == "clarity":
-            create_clarity_agent().run()
-        elif type_ == "tone":
-            create_tone_agent().run()
-        elif type_ == "structure":
-            create_structure_agent().run()
-
     for type_ in ["grammar", "clarity", "tone", "structure"]:
         p = multiprocessing.Process(target=run_specialist, args=(type_,))
         p.start()
         processes.append(p)
         
     # 1 Aggregator
-    def run_aggregator():
-        AggregatorAgent().run()
-
     p_agg = multiprocessing.Process(target=run_aggregator)
     p_agg.start()
     processes.append(p_agg)
