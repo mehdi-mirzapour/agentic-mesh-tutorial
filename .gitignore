@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Logs and PID files
+*.log
+*.pid
+
+# OS generated files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
