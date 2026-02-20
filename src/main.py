@@ -61,10 +61,11 @@ def aggregator():
 @cli.command()
 @click.option("--doc_id", default="doc-demo-1")
 @click.option("--paragraphs", default=3)
-def produce(doc_id, paragraphs):
+@click.option("--file", default=None, help="Path to .docx file")
+def produce(doc_id, paragraphs, file):
     """Produce a test document"""
     from src.ingestion.producer import run_producer
-    run_producer(doc_id, paragraphs)
+    run_producer(doc_id, paragraphs, file)
 
 @cli.command()
 def start_all():

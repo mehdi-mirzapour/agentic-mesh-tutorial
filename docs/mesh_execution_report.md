@@ -59,6 +59,8 @@ uv run python -m src.main coordinator
 🔍 **Monitor in Redis:** Check if the coordinator's consumer group is created.
 ```bash
 redis-cli XINFO GROUPS doc.review.tasks
+# Docker Alternative:
+docker exec redis-agentic redis-cli XINFO GROUPS doc.review.tasks
 ```
 
 ### Step 3: Open Terminal B - The "Specialist" (Grammar)
@@ -69,6 +71,8 @@ uv run python -m src.main specialist --type grammar
 🔍 **Monitor in Redis:** Watch the stream for tasks fanned out by the coordinator.
 ```bash
 redis-cli XREAD STREAMS doc.review.grammar 0
+# Docker Alternative:
+docker exec redis-agentic redis-cli XREAD STREAMS doc.review.grammar 0
 ```
 
 ### Step 4: Open Terminal C - The "Sink" (Aggregator)
@@ -79,21 +83,38 @@ uv run python -m src.main aggregator
 🔍 **Monitor in Redis:** Observe the pending messages for the aggregator.
 ```bash
 redis-cli XPENDING doc.suggestions.grammar aggregator-group
+# Docker Alternative:
+docker exec redis-agentic redis-cli XPENDING doc.suggestions.grammar aggregator-group
 ```
 
 ### Step 5: Open Terminal D - Trigger the Process (Producer)
 Send a new document into the system.
+
+**Option A: Simulated Chunks (Default)**
 ```bash
 uv run python -m src.main produce --doc_id "my-manual-test" --paragraphs 2
 ```
+
+**Option B: Real .docx File**
+First, create a dummy file:
+```bash
+uv run python create_dummy_docx.py
+```
+Then, produce from it:
+```bash
+uv run python -m src.main produce --file dummy_test.docx --doc_id "docx-test"
+```
+
 🔍 **Monitor in Redis:** View the final synthesized report.
 ```bash
 redis-cli XRANGE doc.review.summary - +
+# Docker Alternative:
+docker exec redis-agentic redis-cli XRANGE doc.review.summary - +
 ```
 
 ### What to Look For:
 1.  **Terminal A (Coordinator)**: Should log "Fanning out task..." and "ACKed".
-2.  **Terminal B (Grammar)**: Should log "Analyzing chunk..." and "Suggestion posted".
+2.  **Terminal B (Grammar)**: Should log "Analyzing chunk..." and "Suggestion posted". Every suggestion should now contain an `[AI SERVICE: <TYPE> DONE]` tag.
 3.  **Terminal C (Aggregator)**: Should log "Received suggestion" from multiple specialists.
 4.  **Data Integrity**: Use `redis-cli XLEN doc.review.tasks` to verify that messages are being processed and not just piling up.
 
