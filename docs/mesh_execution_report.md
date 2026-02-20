@@ -41,7 +41,63 @@ The **Aggregator** acted as a central sink, collecting suggestions as they were 
 *   **Reliability**: Every message was successfully ACKed. No messages entered the DLQ (Dead Letter Queue).
 *   **Parallelism**: Specialist agents occupied separate CPU processes, verifying the "Agentic Mesh" principle of distributed compute.
 
-## 4. Operational Notes
+## 4. How to Test Step-by-Step (Manual Verification)
+
+You don't necessarily need a debugger to see the mesh in action. You can observe the "live" flow by running components in separate terminal windows and inspecting Redis directly.
+
+### Step 1: Start Redis
+Ensure your Redis container or service is running.
+```bash
+docker start redis-agentic  # OR brew services start redis
+```
+
+### Step 2: Open Terminal A - The "Traffic Controller" (Coordinator)
+Run the Coordinator and watch it "fan-out" incoming tasks.
+```bash
+uv run python -m src.main coordinator
+```
+🔍 **Monitor in Redis:** Check if the coordinator's consumer group is created.
+```bash
+redis-cli XINFO GROUPS doc.review.tasks
+```
+
+### Step 3: Open Terminal B - The "Specialist" (Grammar)
+Run a specific specialist to see it pick up tasks from its own stream.
+```bash
+uv run python -m src.main specialist --type grammar
+```
+🔍 **Monitor in Redis:** Watch the stream for tasks fanned out by the coordinator.
+```bash
+redis-cli XREAD STREAMS doc.review.grammar 0
+```
+
+### Step 4: Open Terminal C - The "Sink" (Aggregator)
+Run the Aggregator to see the final results being gathered.
+```bash
+uv run python -m src.main aggregator
+```
+🔍 **Monitor in Redis:** Observe the pending messages for the aggregator.
+```bash
+redis-cli XPENDING doc.suggestions.grammar aggregator-group
+```
+
+### Step 5: Open Terminal D - Trigger the Process (Producer)
+Send a new document into the system.
+```bash
+uv run python -m src.main produce --doc_id "my-manual-test" --paragraphs 2
+```
+🔍 **Monitor in Redis:** View the final synthesized report.
+```bash
+redis-cli XRANGE doc.review.summary - +
+```
+
+### What to Look For:
+1.  **Terminal A (Coordinator)**: Should log "Fanning out task..." and "ACKed".
+2.  **Terminal B (Grammar)**: Should log "Analyzing chunk..." and "Suggestion posted".
+3.  **Terminal C (Aggregator)**: Should log "Received suggestion" from multiple specialists.
+4.  **Data Integrity**: Use `redis-cli XLEN doc.review.tasks` to verify that messages are being processed and not just piling up.
+
+## 5. Operational Notes
 During this test run, a fix was applied to the `src/main.py` entrypoint to ensure compatibility with the macOS `spawn` multiprocessing start method. This ensures robust local development on Apple Silicon and Intel Macs.
 
 ---
