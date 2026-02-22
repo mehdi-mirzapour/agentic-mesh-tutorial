@@ -84,22 +84,22 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph sg_redis [1. Redis Streams layer]
-        R["Streams (e.g. doc.review.grammar)"]
+    subgraph sg_redis [1. Redis Streams]
+        R[Redis Stream]
     end
 
-    subgraph sg_keda [2. KEDA Autoscaler layer]
-        XP["XPENDING Monitor (polls queue depth)"]
-        KS["ScaledObject computes: ceil(pending / 50)"]
+    subgraph sg_keda [2. KEDA Autoscaler]
+        XP[XPENDING Monitor]
+        KS[ScaledObject]
     end
 
-    subgraph sg_k8s [3. Kubernetes layer]
-        D["Specialist Agent Deployment"]
+    subgraph sg_k8s [3. Kubernetes]
+        D[Agent Deployment]
     end
 
-    R -->|Pending messages signal| XP
-    XP -->|Provides metric to| KS
-    KS -->|Scales up/down| D
+    R -->|Queue depth| XP
+    XP -->|Triggers| KS
+    KS -->|ceil pending / 50| D
     D -.->|Terminates pods when idle| D
 
     style KS fill:#bbf,stroke:#339,stroke-width:2px
