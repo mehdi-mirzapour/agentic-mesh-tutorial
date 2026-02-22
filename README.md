@@ -1,134 +1,311 @@
-# Agentic Mesh - Tutorial & Reference Implementation
+# Agentic Mesh — Tutorial & Reference Implementation
 
-**Learn the Agentic Mesh Principle: A pragmatic approach to multi-agent distributed systems.**
+> **Learn the Agentic Mesh Principle:** A pragmatic approach to building scalable, decoupled multi-agent distributed systems with Redis Streams and Python.
 
-This repository serves as a tutorial and reference implementation for building scalable, agentic architectures using Redis Streams and Python. It demonstrates how to decouple ingestion, coordination, specialist processing, and aggregation into a robust mesh of independent agents.
+This repository is a fully working tutorial and reference implementation. It demonstrates how to decompose an AI document processing pipeline into a **mesh of independent, stream-connected agents** — each deployable, scalable, and testable in isolation.
+
+---
 
 ## What You Will Learn
 
-- **The Agentic Mesh Principle**: How specialized agents (Grammar, Tone, Clarity) collaborate without direct coupling.
-- **Event-Driven Coordination**: Using a Coordinator pattern to fan-out tasks dynamically.
-- **Resilient Messaging**: Leveraging Redis Consumer Groups for reliable task distribution and processing.
-- **Scalable Architecture**: How to add new capabilities (agents) without modifying the core system.
+| Concept | What the Code Demonstrates |
+|---|---|
+| **Agentic Mesh Principle** | Specialist agents (Grammar, Tone, Clarity, Structure) collaborate with zero direct coupling |
+| **Event-Driven Coordination** | A Coordinator fans out tasks dynamically via Redis Streams |
+| **Resilient Messaging** | Redis Consumer Groups guarantee at-least-once delivery and load balancing |
+| **Horizontal Scalability** | Add replicas of any agent without changing any code |
+| **Kubernetes-Native** | Full manifests for local-to-production deployment |
+| **KEDA Autoscaling** | Scale agents to zero when idle; scale out by stream queue depth |
 
-## Project Overview
+---
 
-- **Minimalist Agentic Part**: Specialist agents simulate LLM processing and append a processing audit tag (e.g., `[AI SERVICE: GRAMMAR DONE]`) to verify the flow.
-- **Full Mesh Implementation**: Real Redis Streams infrastructure for task distribution, fan-out, and aggregation.
-  - **Coordinator**: Fans out tasks to specialists.
-  - **Specialists**: Independent workers that process specific aspects of a document. Supports real `.docx` ingestion.
-  - **Aggregator**: Collects all insights and produces a final summary for the user interface.
+## Architecture
 
-### Architecture Diagram
+### High-Level Flow
 
 ```mermaid
-graph TD
-    User([User]) -->|Inputs Document| C[Coordinator]
-    
-    subgraph "The Mesh (Fabric)"
-        C -->|Fans Out Task| G[Grammar Agent]
-        C -->|Fans Out Task| T[Tone Agent]
-        C -->|Fans Out Task| Cl[Clarity Agent]
-        C -->|Fans Out Task| S[Structure Agent]
+graph LR
+    user([User])
+
+    subgraph sg_ingest [Ingestion]
+        direction TB
+        producer[Producer]
     end
 
-    G -->|Pushes Result| A[Aggregator]
-    T -->|Pushes Result| A
-    Cl -->|Pushes Result| A
-    S -->|Pushes Result| A
-    
-    A -->|Final Report| User
-    
-    style C fill:#f9f,stroke:#333,stroke-width:2px
-    style A fill:#f9f,stroke:#333,stroke-width:2px
+    subgraph sg_redis [Redis Streams]
+        direction TB
+        s_tasks["doc.review.tasks"]
+        s_gram["doc.review.grammar"]
+        s_clar["doc.review.clarity"]
+        s_tone["doc.review.tone"]
+        s_struct["doc.review.structure"]
+        s_results["doc.suggestions.*"]
+        s_summary["doc.review.summary"]
+    end
+
+    subgraph sg_mesh [The Mesh]
+        direction TB
+        coord[Coordinator]
+        subgraph sg_specialists [Specialist Agents]
+            direction LR
+            grammar[Grammar]
+            clarity[Clarity]
+            tone[Tone]
+            structure[Structure]
+        end
+        agg[Aggregator]
+    end
+
+    user -->|"Upload .docx"| producer
+    producer -->|"XADD"| s_tasks
+    s_tasks -->|"XREADGROUP"| coord
+    coord -->|"XADD fan-out"| s_gram
+    coord -->|"XADD fan-out"| s_clar
+    coord -->|"XADD fan-out"| s_tone
+    coord -->|"XADD fan-out"| s_struct
+    s_gram -->|"XREADGROUP"| grammar
+    s_clar -->|"XREADGROUP"| clarity
+    s_tone -->|"XREADGROUP"| tone
+    s_struct -->|"XREADGROUP"| structure
+    grammar -->|"XADD"| s_results
+    clarity -->|"XADD"| s_results
+    tone -->|"XADD"| s_results
+    structure -->|"XADD"| s_results
+    s_results -->|"XREADGROUP"| agg
+    agg -->|"XADD"| s_summary
+    s_summary -->|"Final Report"| user
+
+    style coord fill:#c084fc,stroke:#7e22ce,color:#fff
+    style agg fill:#c084fc,stroke:#7e22ce,color:#fff
+    style producer fill:#60a5fa,stroke:#1d4ed8,color:#fff
 ```
+
+### Key Design Principles
+
+- **No agent calls another agent directly** — all communication is through named Redis Streams.
+- **Consumer Groups** enable multiple replicas of the same agent to share the workload automatically.
+- **The Coordinator is stateless** — it reads a raw task and writes N specialised sub-tasks. It can be swapped or replaced without touching the specialists.
+- **The Aggregator is the only component** that needs awareness of all specialist output streams.
+
+### Stream Map
+
+| Stream | Written By | Read By | Consumer Group |
+|---|---|---|---|
+| `doc.review.tasks` | Producer | Coordinator | `coordinator-group` |
+| `doc.review.grammar` | Coordinator | Grammar Agent | `grammar-group` |
+| `doc.review.clarity` | Coordinator | Clarity Agent | `clarity-group` |
+| `doc.review.tone` | Coordinator | Tone Agent | `tone-group` |
+| `doc.review.structure` | Coordinator | Structure Agent | `structure-group` |
+| `doc.suggestions.*` | Specialist Agents | Aggregator | `aggregator-group` |
+| `doc.review.summary` | Aggregator | User / API | — |
+
+---
+
+## Project Structure
+
+```
+agentic-mesh/
+├── src/
+│   ├── agents/
+│   │   ├── coordinator.py       # Fan-out logic: reads tasks, writes to specialist streams
+│   │   ├── specialists.py       # Grammar, Clarity, Tone, Structure agents + audit tagging
+│   │   └── aggregator.py        # Collects all specialist results, writes final summary
+│   ├── ingestion/
+│   │   └── producer.py          # Reads .docx or simulates paragraphs → XADD to tasks stream
+│   ├── core/
+│   │   └── redis_client.py      # Shared Redis connection and stream helpers
+│   └── main.py                  # Unified CLI: coordinator | specialist | aggregator | produce | start-all
+├── k8s/
+│   ├── redis.yaml               # StatefulSet + headless Service
+│   ├── configmap.yaml           # Shared env (REDIS_HOST, REDIS_PORT)
+│   ├── coordinator.yaml         # Coordinator Deployment
+│   ├── specialists.yaml         # One Deployment per specialist type
+│   ├── aggregator.yaml          # Aggregator Deployment
+│   ├── producer-job.yaml        # One-shot Job for triggering a document run
+│   └── keda-scalers.yaml        # ScaledObjects: scale agents by Redis pending message count
+├── docs/
+│   ├── kubernetes_deployment.md # Full K8s + KEDA guide with YAML and scaling explanation
+│   ├── redis_architecture.md    # Detailed Redis stream diagram
+│   ├── interaction_flow.md      # Sequence diagram of a full document lifecycle
+│   ├── mesh_execution_report.md # Step-by-step Redis CLI walkthrough
+│   ├── redis_cli_manual.md      # Redis commands reference for this project
+│   └── spec.md                  # Full system specification
+├── docker-compose.yml           # Local multi-agent setup with Redis
+├── Dockerfile                   # Single image — role selected at runtime via CLI args
+├── create_dummy_docx.py         # Helper: generate a test .docx file
+└── check_results.py             # Helper: print aggregated results from Redis
+```
+
+---
 
 ## Prerequisites
 
-- **Python 3.12+** (managed by `uv` for modernity and speed)
-- **Redis Server** (The backbone of our mesh)
+- **Python 3.12+** managed by [`uv`](https://docs.astral.sh/uv/)
+- **Redis 7+** (local or via Docker)
 
 ### Start Redis
 
-If you don't have Redis installed:
-
-**Using Docker:**
+**Docker (recommended):**
 ```bash
-docker run -d -p 6379:6379 --name redis-agentic redis:alpine
+docker run -d -p 6379:6379 --name redis-mesh redis:7-alpine
 ```
 
-**Using Homebrew (macOS):**
+**Homebrew (macOS):**
 ```bash
-brew install redis
-brew services start redis
+brew install redis && brew services start redis
 ```
+
+---
 
 ## Setup & Installation
 
-This project uses `uv` for fast, reliable dependency management.
+```bash
+# Install all dependencies (uses uv.lock for reproducibility)
+uv sync
 
-1.  **Install dependencies**:
-    ```bash
-    uv sync
-    ```
+# Verify CLI is working
+uv run python -m src.main --help
+```
 
-2.  **Verify installation**:
-    ```bash
-    uv run python -m src.main --help
-    ```
+---
 
-## Usage
+## Running Locally
 
-You can run individual agents or the entire system to see the mesh in action.
+### Option A — Full Mesh in One Command (Demo Mode)
 
-### 1. Run the Full Mesh (Demo Mode)
-
-This starts the Coordinator, all 4 Specialist Agents, and the Aggregator in parallel.
+Starts the Coordinator, all 4 Specialist Agents, and the Aggregator as parallel processes:
 
 ```bash
 uv run python -m src.main start-all
 ```
 
-### 2. Produce a Document
+### Option B — Individual Agents (for debugging)
 
-In a separate terminal, simulate a user uploading content:
-
-**Option A: Simulated Paragraphs**
 ```bash
-uv run python -m src.main produce --doc_id "sim-123" --paragraphs 5
+uv run python -m src.main coordinator
+uv run python -m src.main specialist --type grammar
+uv run python -m src.main specialist --type clarity
+uv run python -m src.main specialist --type tone
+uv run python -m src.main specialist --type structure
+uv run python -m src.main aggregator
 ```
 
-**Option B: Real .docx File**
+### Option C — Docker Compose
+
 ```bash
-# First, generate a test file (optional)
+docker compose up
+```
+
+---
+
+## Producing Documents
+
+In a **separate terminal**, inject a document into the mesh:
+
+**Simulated paragraphs:**
+```bash
+uv run python -m src.main produce --doc_id "sim-001" --paragraphs 5
+```
+
+**Real `.docx` file:**
+```bash
+# Generate a test file first (optional)
 uv run python create_dummy_docx.py
 
-# Produce from the file
-uv run python -m src.main produce --file dummy_test.docx --doc_id "docx-test"
+# Inject it
+uv run python -m src.main produce --file dummy_test.docx --doc_id "docx-001"
 ```
 
-Watch the logs to see each agent append its tag: `[AI SERVICE: <TYPE> DONE]`.
+Each specialist appends an audit tag to verify the flow: `[AI SERVICE: GRAMMAR DONE]`, `[AI SERVICE: TONE DONE]`, etc.
 
-### 3. Verification & Results
-You can check the final aggregated results in Redis:
+---
+
+## Checking Results
+
 ```bash
+# Pretty-print the aggregated results stored in Redis
 uv run python check_results.py
 ```
 
-### 4. Detailed Manual Testing (Deep Dive)
-For a step-by-step walkthrough of the mesh internals, including specific Redis commands to monitor each stage, see the **[Detailed Mesh Execution Report](./docs/mesh_execution_report.md)**.
+For a deep-dive walk-through of each Redis command as the mesh runs, see the **[Mesh Execution Report](./docs/mesh_execution_report.md)**.
 
-## Project Structure
+---
 
-- `src/core`: Shared models and Redis client infrastructure.
-- `src/agents`: The heart of the mesh.
-  - `coordinator.py`: Logic for task decomposition.
-  - `specialists.py`: Domain-specific agent logic with audit tagging.
-  - `aggregator.py`: Result synthesis.
-- `src/ingestion`: Handles document ingestion (Simulated or .docx).
-- `src/main.py`: Unified CLI entrypoint to control the mesh.
+## Kubernetes Deployment
 
-## Notes
+The entire system runs natively on Kubernetes. Each agent is a separate `Deployment`; the Producer is a `Job`; Redis is a `StatefulSet`.
 
-- The specialist agents currently sleep for a random duration and return a modified version of the text with an audit tag.
-- **Extension Exercise**: Modify `src/agents/specialists.py` to call a real LLM API (like OpenAI or Anthropic) to turn this into a production-ready system.
+### Quick Deploy
+
+```bash
+# 1. Create namespace
+kubectl create namespace agentic-mesh
+
+# 2. Shared config
+kubectl apply -f k8s/configmap.yaml
+
+# 3. Redis (wait for readiness before proceeding)
+kubectl apply -f k8s/redis.yaml
+kubectl wait --for=condition=ready pod -l app=redis -n agentic-mesh --timeout=60s
+
+# 4. All agents
+kubectl apply -f k8s/coordinator.yaml
+kubectl apply -f k8s/specialists.yaml
+kubectl apply -f k8s/aggregator.yaml
+
+# 5. Trigger a test run
+kubectl apply -f k8s/producer-job.yaml
+```
+
+### Manual Scaling
+
+```bash
+# Scale grammar agent to 4 replicas when queue is backing up
+kubectl scale deployment grammar-agent --replicas=4 -n agentic-mesh
+```
+
+Redis Consumer Groups distribute messages across all replicas automatically. **No code changes required.**
+
+### Autoscaling with KEDA (Recommended)
+
+[KEDA](https://keda.sh) scales agents based on Redis stream pending message depth — the exact meaningful signal for this architecture:
+
+```bash
+# Install KEDA
+helm repo add kedacore https://kedacore.github.io/charts && helm repo update
+helm install keda kedacore/keda --namespace keda --create-namespace
+
+# Apply ScaledObjects for all specialists
+kubectl apply -f k8s/keda-scalers.yaml
+```
+
+KEDA will automatically:
+- **Scale out** when messages queue up (e.g., 300 pending → 6 grammar-agent replicas)
+- **Scale to zero** when streams are empty (saves cost when idle)
+
+See the **[full Kubernetes & KEDA guide](./docs/kubernetes_deployment.md)** for manifests, scaling tables, and the complete autoscaling lifecycle explanation.
+
+---
+
+## Documentation Index
+
+| Document | Description |
+|---|---|
+| [Kubernetes Deployment](./docs/kubernetes_deployment.md) | All K8s manifests, KEDA ScaledObjects, scaling strategy |
+| [Redis Architecture](./docs/redis_architecture.md) | Detailed Redis Streams and Consumer Groups diagram |
+| [Interaction Flow](./docs/interaction_flow.md) | Sequence diagram of a full document processing lifecycle |
+| [Mesh Execution Report](./docs/mesh_execution_report.md) | Step-by-step annotated Redis CLI walkthrough |
+| [Redis CLI Manual](./docs/redis_cli_manual.md) | All Redis commands used in this project |
+| [System Spec](./docs/spec.md) | Full functional and technical specification |
+
+---
+
+## Extension Exercise
+
+The specialist agents currently simulate LLM processing with a sleep + audit tag. To make this production-ready:
+
+1. Open `src/agents/specialists.py`
+2. Replace the simulated logic with a real LLM API call (OpenAI, Anthropic, Ollama, etc.)
+3. Re-deploy — the mesh, Redis streams, and Kubernetes manifests require **zero changes**
+
+This is the point of the architecture: **the communication fabric is decoupled from the intelligence inside each agent.**
