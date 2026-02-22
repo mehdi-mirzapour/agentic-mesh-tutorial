@@ -1,0 +1,86 @@
+# KEDA ScaledObjects for all four specialist agents.
+# KEDA watches the Redis Stream pending entries (XPENDING) for each consumer group
+# and adjusts replicas automatically.
+#
+# Formula: desired replicas = ceil(pendingMessages / pendingEntriesCount)
+# Example: 175 pending messages / 50 per pod = 4 replicas
+#
+# Prerequisites:
+#   helm repo add kedacore https://kedacore.github.io/charts
+#   helm install keda kedacore/keda --namespace keda --create-namespace
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: grammar-agent-scaler
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    name: grammar-agent
+  minReplicaCount: 0 # Scale to zero when idle
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  triggers:
+    - type: redis-streams
+      metadata:
+        address: redis.agentic-mesh.svc.cluster.local:6379
+        stream: doc.review.grammar
+        consumerGroup: grammar-group
+        pendingEntriesCount: "50"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: clarity-agent-scaler
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    name: clarity-agent
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  triggers:
+    - type: redis-streams
+      metadata:
+        address: redis.agentic-mesh.svc.cluster.local:6379
+        stream: doc.review.clarity
+        consumerGroup: clarity-group
+        pendingEntriesCount: "50"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: tone-agent-scaler
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    name: tone-agent
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  triggers:
+    - type: redis-streams
+      metadata:
+        address: redis.agentic-mesh.svc.cluster.local:6379
+        stream: doc.review.tone
+        consumerGroup: tone-group
+        pendingEntriesCount: "50"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: structure-agent-scaler
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    name: structure-agent
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  triggers:
+    - type: redis-streams
+      metadata:
+        address: redis.agentic-mesh.svc.cluster.local:6379
+        stream: doc.review.structure
+        consumerGroup: structure-group
+        pendingEntriesCount: "50"

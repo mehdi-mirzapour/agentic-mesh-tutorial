@@ -438,3 +438,161 @@ doc.review.grammar stream
         └──▶ grammar-3 (container 3)  ← message G, H, I
              (all in the same group — Redis distributes automatically)
 ```
+
+---
+
+## Autoscaling Strategy
+
+Kubernetes needs to be told *what signal* to watch before it can scale automatically. There are three levels, each more powerful than the last.
+
+### Level 1 — Manual Scaling (Development / Demo)
+
+You check the queue depth yourself and scale manually:
+
+```bash
+# Check how many messages are waiting
+redis-cli XLEN doc.review.grammar
+
+# Scale if it's backing up
+kubectl scale deployment grammar-agent --replicas=4 -n agentic-mesh
+```
+
+Works for demos and debugging, but requires a human in the loop.
+
+---
+
+### Level 2 — HPA: CPU/Memory Based (Not Recommended for This Architecture)
+
+Kubernetes' built-in **Horizontal Pod Autoscaler** watches CPU or memory usage:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grammar-hpa
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grammar-agent
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+**Why this is a poor fit here:** Our specialist agents spend most of their time *waiting* on the blocking `XREADGROUP` call. When the grammar queue has 5,000 messages backed up, the agent pods still show low CPU — they are blocked, not busy. HPA would not trigger a scale-out in this scenario.
+
+---
+
+### Level 3 — KEDA: Event-Driven Autoscaling (Recommended)
+
+**KEDA (Kubernetes Event-Driven Autoscaling)** scales based on the Redis Stream queue depth — the exact signal that is meaningful in this architecture.
+
+```
+XPENDING doc.review.grammar grammar-group
+         │
+         │  0  messages → scale to 0 pods  (save cost when idle)
+         │  50 messages → scale to 1 pod
+         │ 200 messages → scale to 4 pods
+         │ 500 messages → scale to 10 pods
+         ▼
+  grammar-agent Deployment replicas adjusted automatically
+```
+
+#### Install KEDA
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+helm install keda kedacore/keda --namespace keda --create-namespace
+```
+
+#### KEDA ScaledObject for Each Specialist
+
+KEDA uses a `ScaledObject` resource that points at a Deployment and defines what to watch:
+
+```yaml
+# k8s/keda-grammar.yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: grammar-agent-scaler
+  namespace: agentic-mesh
+spec:
+  scaleTargetRef:
+    name: grammar-agent          # Deployment to scale
+  minReplicaCount: 0             # Scale to ZERO when idle (cost saving)
+  maxReplicaCount: 10
+  cooldownPeriod: 30             # Wait 30s before scaling down
+  triggers:
+  - type: redis-streams
+    metadata:
+      address: redis.agentic-mesh.svc.cluster.local:6379
+      stream: doc.review.grammar
+      consumerGroup: grammar-group
+      pendingEntriesCount: "50"  # 1 replica per 50 pending messages
+```
+
+Repeat for each specialist, changing `name`, `stream`, and `consumerGroup`:
+
+| ScaledObject | Deployment | Stream | Consumer Group |
+|---|---|---|---|
+| `grammar-agent-scaler` | `grammar-agent` | `doc.review.grammar` | `grammar-group` |
+| `clarity-agent-scaler` | `clarity-agent` | `doc.review.clarity` | `clarity-group` |
+| `tone-agent-scaler` | `tone-agent` | `doc.review.tone` | `tone-group` |
+| `structure-agent-scaler` | `structure-agent` | `doc.review.structure` | `structure-group` |
+
+#### How KEDA calculates replicas
+
+```
+desired replicas = ceil(pendingMessages / pendingEntriesCount)
+
+Example:
+  XPENDING doc.review.grammar grammar-group → 175 messages
+  pendingEntriesCount = 50
+  desired = ceil(175 / 50) = 4 replicas
+```
+
+---
+
+### Comparison of All Three Approaches
+
+| Approach | Signal Watched | Scale to Zero | Good For |
+|---|---|---|---|
+| **Manual** | Human decision | No | Development, debugging |
+| **HPA** | CPU / Memory | No | Compute-heavy workloads |
+| **KEDA** | Redis pending messages | **Yes** | **This project — stream-driven agents** |
+
+---
+
+### Full Autoscaling Lifecycle (KEDA)
+
+```
+Producer sends 300 chunks
+        │
+        ▼
+doc.review.grammar → 300 pending messages
+        │
+        ▼
+KEDA polls XPENDING every 30s
+  300 ÷ 50 = 6 replicas needed
+        │
+        ▼
+grammar-agent scaled to 6 pods
+  Each pod reads ~50 messages via XREADGROUP
+  Each pod XACKs after processing
+        │
+        ▼
+Queue drains → 0 pending messages
+        │
+        ▼
+KEDA waits cooldownPeriod (30s), then scales to 0
+  (no cost when idle)
+```
