@@ -24,60 +24,61 @@ This repository is a fully working tutorial and reference implementation. It dem
 ### High-Level Flow
 
 ```mermaid
-graph LR
-    user([User])
+graph TD
+    User[User]
+    Producer[Producer]
+    Coordinator[Coordinator]
+    Grammar[Grammar Agent]
+    Clarity[Clarity Agent]
+    Tone[Tone Agent]
+    Structure[Structure Agent]
+    Aggregator[Aggregator]
 
-    subgraph sg_ingest [Ingestion]
-        direction TB
-        producer[Producer]
+    subgraph Ingestion
+        Producer
     end
 
-    subgraph sg_redis [Redis Streams]
-        direction TB
-        s_tasks["doc.review.tasks"]
-        s_gram["doc.review.grammar"]
-        s_clar["doc.review.clarity"]
-        s_tone["doc.review.tone"]
-        s_struct["doc.review.structure"]
-        s_results["doc.suggestions.*"]
-        s_summary["doc.review.summary"]
+    subgraph Redis Streams
+        T1[doc.review.tasks]
+        T2[doc.review.grammar]
+        T3[doc.review.clarity]
+        T4[doc.review.tone]
+        T5[doc.review.structure]
+        T6[doc.suggestions]
+        T7[doc.review.summary]
     end
 
-    subgraph sg_mesh [The Mesh]
-        direction TB
-        coord[Coordinator]
-        subgraph sg_specialists [Specialist Agents]
-            direction LR
-            grammar[Grammar]
-            clarity[Clarity]
-            tone[Tone]
-            structure[Structure]
-        end
-        agg[Aggregator]
+    subgraph The Mesh
+        Coordinator
+        Grammar
+        Clarity
+        Tone
+        Structure
+        Aggregator
     end
 
-    user -->|"Upload .docx"| producer
-    producer -->|"XADD"| s_tasks
-    s_tasks -->|"XREADGROUP"| coord
-    coord -->|"XADD fan-out"| s_gram
-    coord -->|"XADD fan-out"| s_clar
-    coord -->|"XADD fan-out"| s_tone
-    coord -->|"XADD fan-out"| s_struct
-    s_gram -->|"XREADGROUP"| grammar
-    s_clar -->|"XREADGROUP"| clarity
-    s_tone -->|"XREADGROUP"| tone
-    s_struct -->|"XREADGROUP"| structure
-    grammar -->|"XADD"| s_results
-    clarity -->|"XADD"| s_results
-    tone -->|"XADD"| s_results
-    structure -->|"XADD"| s_results
-    s_results -->|"XREADGROUP"| agg
-    agg -->|"XADD"| s_summary
-    s_summary -->|"Final Report"| user
+    User --> Producer
+    Producer --> T1
+    T1 --> Coordinator
+    Coordinator --> T2
+    Coordinator --> T3
+    Coordinator --> T4
+    Coordinator --> T5
+    T2 --> Grammar
+    T3 --> Clarity
+    T4 --> Tone
+    T5 --> Structure
+    Grammar --> T6
+    Clarity --> T6
+    Tone --> T6
+    Structure --> T6
+    T6 --> Aggregator
+    Aggregator --> T7
+    T7 --> User
 
-    style coord fill:#c084fc,stroke:#7e22ce,color:#fff
-    style agg fill:#c084fc,stroke:#7e22ce,color:#fff
-    style producer fill:#60a5fa,stroke:#1d4ed8,color:#fff
+    style Coordinator fill:#c084fc,stroke:#7e22ce,color:#fff
+    style Aggregator fill:#c084fc,stroke:#7e22ce,color:#fff
+    style Producer fill:#60a5fa,stroke:#1d4ed8,color:#fff
 ```
 
 ### Key Design Principles
