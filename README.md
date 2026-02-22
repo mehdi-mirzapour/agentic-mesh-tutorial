@@ -23,22 +23,36 @@ This repository is a fully working tutorial and reference implementation. It dem
 
 ### Full Pipeline
 
+### 1. Ingestion Layer (Left-to-Right)
+
 ```mermaid
 graph LR
     User([User])
 
-    subgraph sg_ingest [Ingestion Layer]
+    subgraph sg_ingest [Ingestion]
         Prod[Producer]
         Parse[docx Parser]
         Split[Chunk Splitter]
     end
 
-    subgraph sg_redis [Redis Streams]
-        RS[doc.review.tasks]
-    end
+    RS[doc.review.tasks]
+
+    User -->|Upload .docx or text| Prod
+    Prod --> Parse
+    Parse -->|Extract| Split
+    Split -->|XADD chunks| RS
+
+    style RS fill:#ffd,stroke:#aa0,stroke-width:2px
+```
+
+### 2. The Agentic Mesh (Top-to-Bottom)
+
+```mermaid
+graph TD
+    RS[doc.review.tasks]
+    C[Coordinator]
 
     subgraph sg_mesh [The Mesh]
-        C[Coordinator]
         G[Grammar Agent]
         T[Tone Agent]
         Cl[Clarity Agent]
@@ -48,10 +62,6 @@ graph LR
     A[Aggregator]
     Out([Final Report to User])
 
-    User -->|Upload .docx or text| Prod
-    Prod --> Parse
-    Parse -->|Extract paragraphs| Split
-    Split -->|XADD chunks| RS
     RS -->|XREADGROUP| C
     C -->|Fans Out Task| G
     C -->|Fans Out Task| T
