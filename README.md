@@ -84,38 +84,23 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph sg_redis [Redis Streams]
-        RG[doc.review.grammar]
-        RT[doc.review.tone]
-        RC[doc.review.clarity]
-        RSt[doc.review.structure]
+    subgraph sg_redis [1. Redis Streams layer]
+        R["Streams (e.g. doc.review.grammar)"]
     end
 
-    subgraph sg_keda [KEDA Autoscaler]
-        KS[ScaledObject per specialist]
-        XP[XPENDING monitor]
+    subgraph sg_keda [2. KEDA Autoscaler layer]
+        XP["XPENDING Monitor (polls queue depth)"]
+        KS["ScaledObject computes: ceil(pending / 50)"]
     end
 
-    subgraph sg_k8s [Kubernetes]
-        DA[grammar-agent Deployment]
-        DB[tone-agent Deployment]
-        DC[clarity-agent Deployment]
-        DD[structure-agent Deployment]
+    subgraph sg_k8s [3. Kubernetes layer]
+        D["Specialist Agent Deployment"]
     end
 
-    XP -->|Watches queue depth| RG
-    XP -->|Watches queue depth| RT
-    XP -->|Watches queue depth| RC
-    XP -->|Watches queue depth| RSt
-    KS --> XP
-    KS -->|ceil pending / 50| DA
-    KS -->|ceil pending / 50| DB
-    KS -->|ceil pending / 50| DC
-    KS -->|ceil pending / 50| DD
-    DA -.->|Scale to 0 when idle| DA
-    DB -.->|Scale to 0 when idle| DB
-    DC -.->|Scale to 0 when idle| DC
-    DD -.->|Scale to 0 when idle| DD
+    R -->|Pending messages signal| XP
+    XP -->|Provides metric to| KS
+    KS -->|Scales up/down| D
+    D -.->|Terminates pods when idle| D
 
     style KS fill:#bbf,stroke:#339,stroke-width:2px
     style XP fill:#bbf,stroke:#339,stroke-width:2px
