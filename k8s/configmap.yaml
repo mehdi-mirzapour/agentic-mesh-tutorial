@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mesh-config
+  namespace: agentic-mesh
+data:
+  REDIS_HOST: "redis.agentic-mesh.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"

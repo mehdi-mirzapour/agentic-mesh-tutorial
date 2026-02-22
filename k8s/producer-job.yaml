@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: producer-run-001
+  namespace: agentic-mesh
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: producer
+          image: your-registry/agentic-mesh:latest
+          args: ["produce", "--doc_id", "doc-001", "--paragraphs", "5"]
+          envFrom:
+            - configMapRef:
+                name: mesh-config

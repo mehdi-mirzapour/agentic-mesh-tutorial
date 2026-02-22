@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grammar-agent
+  namespace: agentic-mesh
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grammar-agent
+  template:
+    metadata:
+      labels:
+        app: grammar-agent
+    spec:
+      containers:
+        - name: grammar-agent
+          image: your-registry/agentic-mesh:latest
+          args: ["specialist", "--type", "grammar"]
+          envFrom:
+            - configMapRef:
+                name: mesh-config
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clarity-agent
+  namespace: agentic-mesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clarity-agent
+  template:
+    metadata:
+      labels:
+        app: clarity-agent
+    spec:
+      containers:
+        - name: clarity-agent
+          image: your-registry/agentic-mesh:latest
+          args: ["specialist", "--type", "clarity"]
+          envFrom:
+            - configMapRef:
+                name: mesh-config
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tone-agent
+  namespace: agentic-mesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tone-agent
+  template:
+    metadata:
+      labels:
+        app: tone-agent
+    spec:
+      containers:
+        - name: tone-agent
+          image: your-registry/agentic-mesh:latest
+          args: ["specialist", "--type", "tone"]
+          envFrom:
+            - configMapRef:
+                name: mesh-config
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: structure-agent
+  namespace: agentic-mesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: structure-agent
+  template:
+    metadata:
+      labels:
+        app: structure-agent
+    spec:
+      containers:
+        - name: structure-agent
+          image: your-registry/agentic-mesh:latest
+          args: ["specialist", "--type", "structure"]
+          envFrom:
+            - configMapRef:
+                name: mesh-config
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
