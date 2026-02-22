@@ -25,60 +25,31 @@ This repository is a fully working tutorial and reference implementation. It dem
 
 ```mermaid
 graph TD
-    User[User]
-    Producer[Producer]
-    Coordinator[Coordinator]
-    Grammar[Grammar Agent]
-    Clarity[Clarity Agent]
-    Tone[Tone Agent]
-    Structure[Structure Agent]
-    Aggregator[Aggregator]
+    User([User])
 
-    subgraph Ingestion
-        Producer
+    subgraph sg_mesh [The Mesh]
+        C[Coordinator]
+        G[Grammar Agent]
+        T[Tone Agent]
+        Cl[Clarity Agent]
+        S[Structure Agent]
     end
 
-    subgraph Redis Streams
-        T1[doc.review.tasks]
-        T2[doc.review.grammar]
-        T3[doc.review.clarity]
-        T4[doc.review.tone]
-        T5[doc.review.structure]
-        T6[doc.suggestions]
-        T7[doc.review.summary]
-    end
+    A[Aggregator]
 
-    subgraph The Mesh
-        Coordinator
-        Grammar
-        Clarity
-        Tone
-        Structure
-        Aggregator
-    end
+    User -->|Inputs Document| C
+    C -->|Fans Out Task| G
+    C -->|Fans Out Task| T
+    C -->|Fans Out Task| Cl
+    C -->|Fans Out Task| S
+    G -->|Pushes Result| A
+    T -->|Pushes Result| A
+    Cl -->|Pushes Result| A
+    S -->|Pushes Result| A
+    A -->|Final Report| User
 
-    User --> Producer
-    Producer --> T1
-    T1 --> Coordinator
-    Coordinator --> T2
-    Coordinator --> T3
-    Coordinator --> T4
-    Coordinator --> T5
-    T2 --> Grammar
-    T3 --> Clarity
-    T4 --> Tone
-    T5 --> Structure
-    Grammar --> T6
-    Clarity --> T6
-    Tone --> T6
-    Structure --> T6
-    T6 --> Aggregator
-    Aggregator --> T7
-    T7 --> User
-
-    style Coordinator fill:#c084fc,stroke:#7e22ce,color:#fff
-    style Aggregator fill:#c084fc,stroke:#7e22ce,color:#fff
-    style Producer fill:#60a5fa,stroke:#1d4ed8,color:#fff
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style A fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
 ### Key Design Principles
