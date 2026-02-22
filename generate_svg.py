@@ -1,50 +1,55 @@
 import base64
-import json
 import urllib.request
 import re
+import os
 
-def generate_svg():
-    # 1. Read the markdown file
-    with open("docs/redis_architecture.md", "r") as f:
-        content = f.read()
+def generate_svgs():
+    # List of (input_md, output_svg) pairs
+    files_to_process = [
+        ("docs/redis_architecture.md", "docs/redis_architecture.svg"),
+        ("docs/redis_manual_flow.md", "docs/redis_manual_flow.svg"),
+        ("docs/redis_flow_diagram.md", "docs/redis_flow_diagram.svg"),
+        ("docs/interaction_flow.md", "docs/interaction_flow.svg")
+    ]
 
-    # 2. Extract the mermaid block
-    match = re.search(r"```mermaid\n(.*?)\n```", content, re.DOTALL)
-    if not match:
-        print("No mermaid block found in docs/redis_architecture.md")
-        return
+    for input_file, output_file in files_to_process:
+        if not os.path.exists(input_file):
+            print(f"Skipping {input_file}: File not found.")
+            continue
 
-    mermaid_code = match.group(1).strip()
-    
-    # 3. Encode for mermaid.ink
-    # The format is simple base64, but using json object {"code": "...", "mermaid": {...}} is safer for config
-    # Wait, looking at mermaid.live docs, simple base64 of the code works for the /svg endpoint too.
-    # Let's try the simple method first: base64 encoded string.
-    
-    # Needs to be URL-safe base64 but without padding? Or just standard?
-    # According to mermaid.ink: https://mermaid.ink/svg/<base64>
-    # It uses standard base64 encoding.
+        print(f"Processing {input_file}...")
 
-    encoded_string = base64.b64encode(mermaid_code.encode("utf-8")).decode("utf-8")
-    
-    url = f"https://mermaid.ink/svg/{encoded_string}"
-    print(f"Fetching SVG from: {url}")
+        # 1. Read the markdown file
+        with open(input_file, "r") as f:
+            content = f.read()
 
-    try:
-        with urllib.request.urlopen(url) as response:
-            svg_content = response.read().decode("utf-8")
-            
-        # 4. Save to file
-        output_path = "docs/redis_architecture.svg"
-        with open(output_path, "w") as f:
-            f.write(svg_content)
+        # 2. Extract the mermaid block
+        # Using a more robust regex to handle various mermaid blocks
+        match = re.search(r"```mermaid\s*\n(.*?)\n\s*```", content, re.DOTALL)
+        if not match:
+            print(f"  No mermaid block found in {input_file}")
+            continue
+
+        mermaid_code = match.group(1).strip()
         
-        print(f"Successfully saved SVG to {output_path}")
+        # 3. Encode for mermaid.ink
+        encoded_string = base64.b64encode(mermaid_code.encode("utf-8")).decode("utf-8")
+        url = f"https://mermaid.ink/svg/{encoded_string}"
+        
+        try:
+            # Use a dummy user-agent to avoid potential blocks
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                svg_content = response.read().decode("utf-8")
+                
+            # 4. Save to file
+            with open(output_file, "w") as f:
+                f.write(svg_content)
+            
+            print(f"  Successfully saved {output_file}")
 
-    except Exception as e:
-        print(f"Error fetching SVG: {e}")
-        # Fallback: Create HTML for manual screenshot if network fails (optional, but good practice)
-        pass
+        except Exception as e:
+            print(f"  Error fetching SVG for {input_file}: {e}")
 
 if __name__ == "__main__":
-    generate_svg()
+    generate_svgs()

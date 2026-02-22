@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-mesh
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mesh-network
+
+  coordinator:
+    build: .
+    container_name: agent-coordinator
+    command: coordinator
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+  aggregator:
+    build: .
+    container_name: agent-aggregator
+    command: aggregator
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+  # Specialist: Grammar
+  grammar-agent:
+    build: .
+    command: specialist --type grammar
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+  # Specialist: Clarity
+  clarity-agent:
+    build: .
+    command: specialist --type clarity
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+  # Specialist: Tone
+  tone-agent:
+    build: .
+    command: specialist --type tone
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+  # Specialist: Structure
+  structure-agent:
+    build: .
+    command: specialist --type structure
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - mesh-network
+
+networks:
+  mesh-network:
+    driver: bridge
+
+volumes:
+  redis_data:
