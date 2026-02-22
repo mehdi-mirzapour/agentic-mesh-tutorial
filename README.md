@@ -83,7 +83,7 @@ graph TD
 ### Autoscaling with KEDA + Kubernetes
 
 ```mermaid
-graph TD
+graph LR
     subgraph sg_redis [1. Redis Streams]
         R[Redis Stream]
     end
