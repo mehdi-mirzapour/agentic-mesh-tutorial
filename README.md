@@ -46,6 +46,7 @@ graph TD
     end
 
     A[Aggregator]
+    Out([Final Report to User])
 
     User -->|Upload .docx or text| Prod
     Prod --> Parse
@@ -60,12 +61,14 @@ graph TD
     T -->|Pushes Result| A
     Cl -->|Pushes Result| A
     S -->|Pushes Result| A
-    A -->|Final Report| User
+    A --> Out
 
     style C fill:#f9f,stroke:#333,stroke-width:2px
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style RS fill:#ffd,stroke:#aa0,stroke-width:2px
+    style Out fill:#afa,stroke:#090,stroke-width:2px
 ```
+
 
 ### Autoscaling with KEDA + Kubernetes
 
