@@ -21,11 +21,21 @@ This repository is a fully working tutorial and reference implementation. It dem
 
 ## Architecture
 
-### High-Level Flow
+### Full Pipeline
 
 ```mermaid
 graph TD
     User([User])
+
+    subgraph sg_ingest [Ingestion Layer]
+        Prod[Producer]
+        Parse[docx Parser]
+        Split[Chunk Splitter]
+    end
+
+    subgraph sg_redis [Redis Streams]
+        RS[doc.review.tasks]
+    end
 
     subgraph sg_mesh [The Mesh]
         C[Coordinator]
@@ -37,7 +47,11 @@ graph TD
 
     A[Aggregator]
 
-    User -->|Inputs Document| C
+    User -->|Upload .docx or text| Prod
+    Prod --> Parse
+    Parse -->|Extract paragraphs| Split
+    Split -->|XADD chunks| RS
+    RS -->|XREADGROUP| C
     C -->|Fans Out Task| G
     C -->|Fans Out Task| T
     C -->|Fans Out Task| Cl
@@ -50,14 +64,62 @@ graph TD
 
     style C fill:#f9f,stroke:#333,stroke-width:2px
     style A fill:#f9f,stroke:#333,stroke-width:2px
+    style RS fill:#ffd,stroke:#aa0,stroke-width:2px
 ```
+
+### Autoscaling with KEDA + Kubernetes
+
+```mermaid
+graph TD
+    subgraph sg_redis [Redis Streams]
+        RG[doc.review.grammar]
+        RT[doc.review.tone]
+        RC[doc.review.clarity]
+        RSt[doc.review.structure]
+    end
+
+    subgraph sg_keda [KEDA Autoscaler]
+        KS[ScaledObject per specialist]
+        XP[XPENDING monitor]
+    end
+
+    subgraph sg_k8s [Kubernetes]
+        DA[grammar-agent Deployment]
+        DB[tone-agent Deployment]
+        DC[clarity-agent Deployment]
+        DD[structure-agent Deployment]
+    end
+
+    XP -->|Watches queue depth| RG
+    XP -->|Watches queue depth| RT
+    XP -->|Watches queue depth| RC
+    XP -->|Watches queue depth| RSt
+    KS --> XP
+    KS -->|ceil pending / 50| DA
+    KS -->|ceil pending / 50| DB
+    KS -->|ceil pending / 50| DC
+    KS -->|ceil pending / 50| DD
+    DA -.->|Scale to 0 when idle| DA
+    DB -.->|Scale to 0 when idle| DB
+    DC -.->|Scale to 0 when idle| DC
+    DD -.->|Scale to 0 when idle| DD
+
+    style KS fill:#bbf,stroke:#339,stroke-width:2px
+    style XP fill:#bbf,stroke:#339,stroke-width:2px
+```
+
+> **Scaling formula:** `desired replicas = ceil(pendingMessages / 50)` — e.g. 175 pending messages → 4 grammar-agent pods. Scales to **zero** when streams are empty.
 
 ### Key Design Principles
 
-- **No agent calls another agent directly** — all communication is through named Redis Streams.
-- **Consumer Groups** enable multiple replicas of the same agent to share the workload automatically.
-- **The Coordinator is stateless** — it reads a raw task and writes N specialised sub-tasks. It can be swapped or replaced without touching the specialists.
-- **The Aggregator is the only component** that needs awareness of all specialist output streams.
+- **No agent calls another agent directly** — all communication goes through named Redis Streams.
+- **Ingestion is decoupled** — the Producer parses `.docx` into chunks and publishes to Redis independently of processing speed.
+- **Consumer Groups** load-balance automatically — add replicas of any agent without changing a single line of code.
+- **The Coordinator is stateless** — it reads one raw task and writes N sub-tasks; swappable without touching specialists.
+- **KEDA watches the real signal** — queue depth, not CPU. Agents that block on `XREADGROUP` show low CPU even when overloaded; KEDA scales them correctly.
+- **Scale to zero** — specialist pods terminate when idle, saving cost in Kubernetes.
+
+
 
 ### Stream Map
 
