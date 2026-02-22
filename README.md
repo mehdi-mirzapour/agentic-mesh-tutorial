@@ -24,7 +24,7 @@ This repository is a fully working tutorial and reference implementation. It dem
 ### Full Pipeline
 
 ```mermaid
-graph TD
+graph LR
     User([User])
 
     subgraph sg_ingest [Ingestion Layer]
